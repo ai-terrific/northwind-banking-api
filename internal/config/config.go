@@ -21,6 +21,7 @@ type Config struct {
 	JWT          JWTConfig
 	Security     SecurityConfig
 	ExternalBank ExternalBankConfig
+	Regulator    RegulatorConfig
 }
 
 type ServerConfig struct {
@@ -69,6 +70,13 @@ type ExternalBankConfig struct {
 	Timeout int
 }
 
+type RegulatorConfig struct {
+	WebhookURL string
+	Secret     string
+	Timeout    time.Duration
+	Enabled    bool
+}
+
 func Load() *Config {
 	config := &Config{
 		Server: ServerConfig{
@@ -108,6 +116,12 @@ func Load() *Config {
 			BaseUrl: getEnv("EXTERNAL_BANKING_BASE_URL", "https://northwind.dev.array.io"),
 			ApiKey:  getEnv("EXTERNAL_BANKING_API_KEY", ""),
 			Timeout: getIntEnv("EXTERNAL_BANKING_TIMEOUT", 10),
+		},
+		Regulator: RegulatorConfig{
+			WebhookURL: getEnv("REGULATOR_WEBHOOK_URL", ""),
+			Secret:     getEnv("REGULATOR_WEBHOOK_SECRET", ""),
+			Timeout:    getDurationEnv("REGULATOR_WEBHOOK_TIMEOUT", 3*time.Second),
+			Enabled:    getBoolEnv("REGULATOR_WEBHOOK_ENABLED", false),
 		},
 	}
 

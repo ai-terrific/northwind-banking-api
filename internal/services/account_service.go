@@ -28,12 +28,19 @@ var (
 
 // accountService implements AccountServiceInterface interface
 type accountService struct {
-	accountRepo     repositories.AccountRepositoryInterface
-	transactionRepo repositories.TransactionRepositoryInterface
-	transferRepo    repositories.TransferRepositoryInterface
-	userRepo        repositories.UserRepositoryInterface
-	auditRepo       repositories.AuditLogRepositoryInterface
-	logger          *slog.Logger
+	accountRepo             repositories.AccountRepositoryInterface
+	transactionRepo         repositories.TransactionRepositoryInterface
+	transferRepo            repositories.TransferRepositoryInterface
+	userRepo                repositories.UserRepositoryInterface
+	auditRepo               repositories.AuditLogRepositoryInterface
+	logger                  *slog.Logger
+	regulatorWebhookService *RegulatorWebhookService
+}
+
+// SetRegulatorWebhookService configures durable regulator notifications without
+// changing the existing account service constructor.
+func (s *accountService) SetRegulatorWebhookService(service *RegulatorWebhookService) {
+	s.regulatorWebhookService = service
 }
 
 // NewAccountService creates an account service with transfer and transaction support
@@ -53,6 +60,17 @@ func NewAccountService(
 		auditRepo:       auditRepo,
 		logger:          logger,
 	}
+}
+
+// ConfigureRegulatorWebhookService attaches durable regulator notifications
+// while preserving the existing AccountServiceInterface contract.
+func ConfigureRegulatorWebhookService(service AccountServiceInterface, webhook *RegulatorWebhookService) error {
+	account, ok := service.(*accountService)
+	if !ok {
+		return errors.New("account service is not backed by the standard implementation")
+	}
+	account.SetRegulatorWebhookService(webhook)
+	return nil
 }
 
 // CreateAccount creates a new account for a user
@@ -652,6 +670,12 @@ func (s *accountService) handleTransferFailure(
 	}); err != nil {
 		s.logger.Error("failed to create audit log", "error", err, "action", "transfer.failed")
 	}
+
+	if s.regulatorWebhookService != nil {
+		if err := s.regulatorWebhookService.QueueTransferEvent(transfer); err != nil {
+			s.logger.Error("failed to queue regulator failure event", "error", err, "transfer_id", transfer.ID)
+		}
+	}
 }
 
 func (s *accountService) handleTransferSuccess(
@@ -683,6 +707,12 @@ func (s *accountService) handleTransferSuccess(
 		},
 	}); err != nil {
 		s.logger.Error("failed to create audit log", "error", err, "action", "transfer.completed")
+	}
+
+	if s.regulatorWebhookService != nil {
+		if err := s.regulatorWebhookService.QueueTransferEvent(transfer); err != nil {
+			return fmt.Errorf("failed to queue regulator success event: %w", err)
+		}
 	}
 
 	return nil

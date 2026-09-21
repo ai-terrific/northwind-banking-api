@@ -59,6 +59,7 @@ func (db *DB) AutoMigrate() error {
 		&models.Transfer{},
 		&models.AuditLog{},
 		&models.ProcessingQueueItem{},
+		&models.RegulatorEvent{},
 	)
 }
 
@@ -72,6 +73,7 @@ func (db *DB) ensureSchema() error {
 		&models.Transaction{},
 		&models.Transfer{},
 		&models.ProcessingQueueItem{},
+		&models.RegulatorEvent{},
 	}
 
 	for _, model := range modelsToCheck {
