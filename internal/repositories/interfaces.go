@@ -121,6 +121,15 @@ type TransferRepositoryInterface interface {
 	CountByUserAccounts(accountIDs []uuid.UUID) (int64, error)
 }
 
+type RegulatorEventRepositoryInterface interface {
+	Create(event *models.RegulatorEvent) error
+	FindPending(limit int) ([]*models.RegulatorEvent, error)
+	MarkProcessing(id uuid.UUID) error
+	MarkDelivered(id uuid.UUID) error
+	MarkRetry(id uuid.UUID, attempts int, nextAttemptAt time.Time, lastError string) error
+	MarkFailed(id uuid.UUID, lastError string) error
+}
+
 type RefreshTokenRepositoryInterface interface {
 	Create(token *models.RefreshToken) error
 	GetByID(id uuid.UUID) (*models.RefreshToken, error)
