@@ -23,6 +23,7 @@ type RegulatorEvent struct {
 	Status        string     `gorm:"type:varchar(20);not null;index" json:"status"`
 	Attempts      int        `gorm:"not null;default:0" json:"attempts"`
 	NextAttemptAt time.Time  `gorm:"not null;index" json:"next_attempt_at"`
+	DeadlineAt    time.Time  `gorm:"not null;index" json:"deadline_at"`
 	DeliveredAt   *time.Time `json:"delivered_at,omitempty"`
 	LastError     string     `gorm:"type:text" json:"last_error,omitempty"`
 	CreatedAt     time.Time  `gorm:"not null" json:"created_at"`
@@ -53,4 +54,29 @@ func (e *RegulatorEvent) BeforeCreate(tx *gorm.DB) error {
 
 func (*RegulatorEvent) TableName() string {
 	return "regulator_events"
+}
+
+type RegulatorEventAttempt struct {
+	ID               uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	RegulatorEventID uuid.UUID `gorm:"type:uuid;not null;index" json:"regulator_event_id"`
+	AttemptNumber    int       `gorm:"not null" json:"attempt_number"`
+	StartedAt        time.Time `gorm:"not null" json:"started_at"`
+	FinishedAt       time.Time `gorm:"not null" json:"finished_at"`
+	ResponseStatus   *int      `json:"response_status,omitempty"`
+	ErrorMessage     string    `gorm:"type:text" json:"error_message,omitempty"`
+	CreatedAt        time.Time `gorm:"not null" json:"created_at"`
+}
+
+func (a *RegulatorEventAttempt) BeforeCreate(tx *gorm.DB) error {
+	if a.ID == uuid.Nil {
+		a.ID = uuid.New()
+	}
+	if a.CreatedAt.IsZero() {
+		a.CreatedAt = time.Now().UTC()
+	}
+	return nil
+}
+
+func (*RegulatorEventAttempt) TableName() string {
+	return "regulator_event_attempts"
 }

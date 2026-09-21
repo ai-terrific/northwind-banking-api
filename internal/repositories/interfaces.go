@@ -128,6 +128,7 @@ type RegulatorEventRepositoryInterface interface {
 	MarkDelivered(id uuid.UUID) error
 	MarkRetry(id uuid.UUID, attempts int, nextAttemptAt time.Time, lastError string) error
 	MarkFailed(id uuid.UUID, lastError string) error
+	RecordAttempt(attempt *models.RegulatorEventAttempt) error
 }
 
 type RefreshTokenRepositoryInterface interface {

@@ -76,6 +76,7 @@ func (s *RegulatorWebhookService) QueueTransferEvent(transfer *models.Transfer) 
 		Payload:       string(payload),
 		Status:        models.RegulatorEventStatusPending,
 		NextAttemptAt: now,
+		DeadlineAt:    now.Add(regulatorNotificationDeadline),
 	})
 }
 
@@ -118,20 +119,39 @@ func (s *RegulatorWebhookService) processEvent(ctx context.Context, event *model
 		return fmt.Errorf("regulator event cannot be nil")
 	}
 
-	if time.Now().UTC().After(event.CreatedAt.Add(regulatorNotificationDeadline)) {
+	if time.Now().UTC().After(event.DeadlineAt) {
 		return s.repository.MarkFailed(event.ID, "regulator notification deadline exceeded")
 	}
 
 	sendCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	if err := s.client.Send(sendCtx, event.EventID, []byte(event.Payload)); err == nil {
-		return s.repository.MarkDelivered(event.ID)
-	} else {
-		attempts := event.Attempts + 1
-		nextAttempt := time.Now().UTC().Add(retryDelay(attempts))
-		return s.repository.MarkRetry(event.ID, attempts, nextAttempt, err.Error())
+	startedAt := time.Now().UTC()
+	statusCode, sendErr := s.client.Send(sendCtx, event.EventID, []byte(event.Payload))
+	finishedAt := time.Now().UTC()
+	attempt := &models.RegulatorEventAttempt{
+		RegulatorEventID: event.ID,
+		AttemptNumber:    event.Attempts + 1,
+		StartedAt:        startedAt,
+		FinishedAt:       finishedAt,
 	}
+	if statusCode != 0 {
+		attempt.ResponseStatus = &statusCode
+	}
+	if sendErr != nil {
+		attempt.ErrorMessage = sendErr.Error()
+	}
+	if err := s.repository.RecordAttempt(attempt); err != nil {
+		return err
+	}
+
+	if sendErr == nil {
+		return s.repository.MarkDelivered(event.ID)
+	}
+
+	attempts := event.Attempts + 1
+	nextAttempt := time.Now().UTC().Add(retryDelay(attempts))
+	return s.repository.MarkRetry(event.ID, attempts, nextAttempt, sendErr.Error())
 }
 
 func retryDelay(attempt int) time.Duration {

@@ -128,6 +128,16 @@ func (r *regulatorEventRepository) MarkFailed(id uuid.UUID, lastError string) er
 	return nil
 }
 
+func (r *regulatorEventRepository) RecordAttempt(attempt *models.RegulatorEventAttempt) error {
+	if attempt == nil {
+		return errors.New("regulator event attempt cannot be nil")
+	}
+	if err := r.db.Create(attempt).Error; err != nil {
+		return fmt.Errorf("failed to record regulator event attempt: %w", err)
+	}
+	return nil
+}
+
 func (r *regulatorEventRepository) updateStatus(id uuid.UUID, status string) error {
 	result := r.db.Model(&models.RegulatorEvent{}).
 		Where("id = ?", id).

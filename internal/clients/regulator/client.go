@@ -31,10 +31,10 @@ func NewClient(url, secret string, timeout time.Duration) *Client {
 	}
 }
 
-func (c *Client) Send(ctx context.Context, eventID string, payload []byte) error {
+func (c *Client) Send(ctx context.Context, eventID string, payload []byte) (int, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.url, bytes.NewReader(payload))
 	if err != nil {
-		return fmt.Errorf("create regulator request: %w", err)
+		return 0, fmt.Errorf("create regulator request: %w", err)
 	}
 
 	request.Header.Set("Content-Type", "application/json")
@@ -43,15 +43,15 @@ func (c *Client) Send(ctx context.Context, eventID string, payload []byte) error
 
 	response, err := c.httpClient.Do(request)
 	if err != nil {
-		return fmt.Errorf("send regulator webhook: %w", err)
+		return 0, fmt.Errorf("send regulator webhook: %w", err)
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("regulator returned status %d", response.StatusCode)
+		return response.StatusCode, fmt.Errorf("regulator returned status %d", response.StatusCode)
 	}
 
-	return nil
+	return response.StatusCode, nil
 }
 
 func (c *Client) sign(payload []byte) string {
