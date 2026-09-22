@@ -130,6 +130,10 @@ type RegulatorEventRepositoryInterface interface {
 	MarkFailed(id uuid.UUID, lastError string) error
 }
 
+type ExternalTransferResultRepositoryInterface interface {
+	Create(result *models.ExternalTransferResult) error
+}
+
 type RefreshTokenRepositoryInterface interface {
 	Create(token *models.RefreshToken) error
 	GetByID(id uuid.UUID) (*models.RefreshToken, error)

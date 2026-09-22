@@ -18,9 +18,14 @@ import (
 var cfg *config.Config = config.Load()
 
 type ExternalBankAPIHandler struct {
-	client  *http.Client
-	baseURL string
-	apiKey  string
+	client         *http.Client
+	baseURL        string
+	apiKey         string
+	resultRecorder ExternalTransferResultRecorder
+}
+
+type ExternalTransferResultRecorder interface {
+	Record(result *models.ExternalTransferResult) error
 }
 
 func NewExternalAPIHandler(baseURL, apiKey string) *ExternalBankAPIHandler {
@@ -29,6 +34,10 @@ func NewExternalAPIHandler(baseURL, apiKey string) *ExternalBankAPIHandler {
 		baseURL: baseURL,
 		apiKey:  apiKey,
 	}
+}
+
+func (h *ExternalBankAPIHandler) SetExternalTransferResultRecorder(recorder ExternalTransferResultRecorder) {
+	h.resultRecorder = recorder
 }
 
 func (h *ExternalBankAPIHandler) newExternalRequest(c echo.Context, payload interface{}, endpoint string) (*http.Request, error) {
@@ -60,6 +69,42 @@ func (h *ExternalBankAPIHandler) ValidationAccount(c echo.Context) error {
 	}
 
 	httpReq, err := h.newExternalRequest(c, req, "/external/accounts/validate")
+	if err != nil {
+		return err
+	}
+
+	response, err := h.client.Do(httpReq)
+	log.Println(h.baseURL)
+	if err != nil {
+		return echo.NewHTTPError(
+			http.StatusBadGateway,
+			"external API unavailable",
+		)
+	}
+	defer response.Body.Close()
+
+	responseBody, err := io.ReadAll(response.Body)
+	if err != nil {
+		return echo.NewHTTPError(
+			http.StatusBadGateway,
+			"failed to read external response",
+		)
+	}
+
+	return c.Blob(
+		response.StatusCode,
+		response.Header.Get("Content-Type"),
+		responseBody,
+	)
+}
+
+func (h *ExternalBankAPIHandler) ValidateTransfer(c echo.Context) error {
+	var req models.TransferRequest
+	if err := c.Bind(&req); err != nil {
+		return err
+	}
+
+	httpReq, err := h.newExternalRequest(c, req, "/external/transfers/validate")
 	if err != nil {
 		return err
 	}
@@ -164,8 +209,34 @@ func (h *ExternalBankAPIHandler) BatchTransfers(c echo.Context) error {
 	return c.JSON(http.StatusOK, response)
 }
 
-func (h *ExternalBankAPIHandler) initiateBatchTransfer(c echo.Context, transfer models.TransferRequest) dto.BatchTransferItem {
-	item := dto.BatchTransferItem{Status: "failed"}
+func (h *ExternalBankAPIHandler) initiateBatchTransfer(c echo.Context, transfer models.TransferRequest) (item dto.BatchTransferItem) {
+	item = dto.BatchTransferItem{Status: "failed"}
+	defer func() {
+		if h.resultRecorder == nil {
+			return
+		}
+		payload, err := json.Marshal(map[string]interface{}{
+			"event_type":       "external_transfer.result",
+			"transfer_id":      item.TransferID,
+			"status":           item.Status,
+			"reference_number": item.ReferenceNu,
+			"error":            item.Error,
+		})
+		if err != nil {
+			log.Printf("failed to marshal external transfer result: %v", err)
+			return
+		}
+		if err := h.resultRecorder.Record(&models.ExternalTransferResult{
+			ExternalTransferID: item.TransferID,
+			ReferenceNumber:    item.ReferenceNu,
+			Status:             item.Status,
+			Error:              item.Error,
+			Payload:            string(payload),
+		}); err != nil {
+			log.Printf("failed to persist external transfer result: %v", err)
+		}
+	}()
+
 	httpReq, err := h.newExternalRequest(c, transfer, "/external/transfers/initiate")
 	if err != nil {
 		item.Error = err.Error()

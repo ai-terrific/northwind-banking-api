@@ -71,11 +71,30 @@ func (s *RegulatorWebhookService) QueueTransferEvent(transfer *models.Transfer) 
 	now := time.Now().UTC()
 	return s.repository.Create(&models.RegulatorEvent{
 		EventID:       event.EventID,
-		TransferID:    transfer.ID,
+		TransferID:    &transfer.ID,
 		EventType:     eventType,
 		Payload:       string(payload),
 		Status:        models.RegulatorEventStatusPending,
 		NextAttemptAt: now,
+	})
+}
+
+func (s *RegulatorWebhookService) QueueExternalTransferResult(result *models.ExternalTransferResult) error {
+	if result == nil {
+		return fmt.Errorf("external transfer result cannot be nil")
+	}
+
+	eventType := "external_transfer.failed"
+	if result.Error == "" && result.Status != "failed" {
+		eventType = "external_transfer.succeeded"
+	}
+
+	return s.repository.Create(&models.RegulatorEvent{
+		EventID:       "external-transfer-" + result.ID.String(),
+		EventType:     eventType,
+		Payload:       result.Payload,
+		Status:        models.RegulatorEventStatusPending,
+		NextAttemptAt: time.Now().UTC(),
 	})
 }
 

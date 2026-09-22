@@ -17,7 +17,7 @@ const (
 type RegulatorEvent struct {
 	ID            uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
 	EventID       string     `gorm:"type:varchar(255);uniqueIndex;not null" json:"event_id"`
-	TransferID    uuid.UUID  `gorm:"type:uuid;not null;index" json:"transfer_id"`
+	TransferID    *uuid.UUID `gorm:"type:uuid;index" json:"transfer_id,omitempty"`
 	EventType     string     `gorm:"type:varchar(100);not null" json:"event_type"`
 	Payload       string     `gorm:"type:jsonb;not null" json:"payload"`
 	Status        string     `gorm:"type:varchar(20);not null;index" json:"status"`
